@@ -914,7 +914,13 @@ if(NOT MSVC)
   append_cxx_flag_if_supported("-fno-math-errno" CMAKE_CXX_FLAGS)
   append_cxx_flag_if_supported("-fno-trapping-math" CMAKE_CXX_FLAGS)
   append_cxx_flag_if_supported("-Werror=format" CMAKE_CXX_FLAGS)
+  if (USE_ASAN AND USE_ROCM)
+        #/var/lib/jenkins/pytorch/torch/csrc/autograd/generated/python_return_types.cpp:19:87: error: cast from 'PyObject *(*)(PyStructSequence *)' (aka '_object *(*)(PyTupleObject *)') to 'reprfunc' (aka '_object *(*)(_object *)') converts to incompatible function type [-Werror,-Wcast-function-type-strict]
+        #        _fake_quantize_per_tensor_affine_cachemask_tensor_qparamsNamedTuple.tp_repr = (reprfunc)torch::utils::returned_structseq_repr;
+        #                                                                                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  else()
   append_cxx_flag_if_supported("-Werror=cast-function-type" CMAKE_CXX_FLAGS)
+  endif()
 else()
   # skip unwanted includes from windows.h
   add_compile_definitions(WIN32_LEAN_AND_MEAN)

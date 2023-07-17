@@ -1271,7 +1271,9 @@ if(USE_ROCM)
     list(APPEND HIP_CXX_FLAGS -Wno-duplicate-decl-specifier)
     list(APPEND HIP_CXX_FLAGS -DCAFFE2_USE_MIOPEN)
     list(APPEND HIP_CXX_FLAGS -DTHRUST_DEVICE_SYSTEM=THRUST_DEVICE_SYSTEM_HIP)
-    list(APPEND HIP_CXX_FLAGS -std=c++17)
+    # can't add this flag since HIP_CXX_FLAGS become HIP_CLANG_FLAGS
+    # which is also used with C source files when using hip-clang compiler for all sources, e.g. ASAN builds
+    list(APPEND HIP_HIPCC_FLAGS -std=c++17)
     add_definitions(-DROCM_VERSION=${ROCM_VERSION_DEV_INT})
     add_definitions(-DTORCH_HIP_VERSION=${TORCH_HIP_VERSION})
     message("TORCH_HIP_VERSION=${TORCH_HIP_VERSION} is added as a compiler defines")
