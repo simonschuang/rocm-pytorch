@@ -49,12 +49,20 @@ def aot_compile(
         gm,
         example_inputs,
         config_patches=options,
-    )()
+    )
+
+    # AOTInductor returns result as a string, not callable
+    # Maybe this check is not neded?
+    if callable(result):
+        result = result()
+
     lib_path = result[0] if isinstance(result, (list, tuple)) else result
     return lib_path
 
 
-def list_mode_options(mode: str = None, dynamic: bool = None) -> Dict[str, Any]:
+def list_mode_options(
+    mode: Optional[str] = None, dynamic: Optional[bool] = None
+) -> Dict[str, Any]:
     r"""Returns a dictionary describing the optimizations that each of the available
     modes passed to `torch.compile()` performs.
 
@@ -62,13 +70,12 @@ def list_mode_options(mode: str = None, dynamic: bool = None) -> Dict[str, Any]:
         mode (str, optional): The mode to return the optimizations for.
         If None, returns optimizations for all modes
         dynamic (bool, optional): Whether dynamic shape is enabled.
-        When dynamic_shape is enabled, cuda graph will be disabled.
 
     Example::
         >>> torch._inductor.list_mode_options()
     """
 
-    mode_options = {
+    mode_options: Dict[str, Dict[str, bool]] = {
         "default": {},
         # enable cudagraphs
         "reduce-overhead": {
@@ -79,18 +86,16 @@ def list_mode_options(mode: str = None, dynamic: bool = None) -> Dict[str, Any]:
             "max_autotune": True,
         },
         # enable max-autotune
-        # enable cudagraphs when dynamic is not set
-        # otherwise, if both cudagraphs and dynamic are enabled, Inductor
-        # recompiles for each new shape
+        # enable cudagraphs
         "max-autotune": {
             "max_autotune": True,
-            "triton.cudagraphs": (dynamic is not True),
+            "triton.cudagraphs": True,
         },
     }
-    return mode_options[mode] if mode else mode_options
+    return mode_options[mode] if mode else mode_options  # type: ignore[return-value]
 
 
-def list_options() -> Dict[str, Any]:
+def list_options() -> List[str]:
     r"""Returns a dictionary describing the optimizations and debug configurations
     that are available to `torch.compile()`.
 

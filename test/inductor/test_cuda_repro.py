@@ -14,8 +14,8 @@ from torch._inductor.compile_fx import compile_fx_inner
 from torch.fx.experimental.proxy_tensor import make_fx
 from torch.testing._internal.common_utils import (
     DeterministicGuard,
+    freeze_rng_state,
     IS_FBCODE,
-    skipIfRocm,
     TEST_WITH_ASAN,
 )
 
@@ -144,7 +144,6 @@ class CudaReproTests(TestCase):
         compiled = compile_fx_inner(mod, ())
         assert compiled([])[0].device.type == "cuda"
 
-    @skipIfRocm
     @config.patch({"triton.cudagraphs": True})
     @dynamo_config.patch(automatic_dynamic_shapes=True)
     def test_no_device_idx_repro_cudagraphs(self):
@@ -173,7 +172,6 @@ class CudaReproTests(TestCase):
 
         self.common(Repro(), ())
 
-    @skipIfRocm
     @config.patch({"triton.cudagraphs": True})
     @dynamo_config.patch(automatic_dynamic_shapes=True)
     def test_expanded_inputs_cudagraphs(self):
@@ -187,7 +185,6 @@ class CudaReproTests(TestCase):
         )
         self.assertTrue(same(fn(*inputs), inputs[0] + inputs[1]))
 
-    @skipIfRocm
     @config.patch({"triton.cudagraphs": True})
     @dynamo_config.patch(
         automatic_dynamic_shapes=True,
@@ -236,7 +233,6 @@ class CudaReproTests(TestCase):
         self.assertEqual(real_out, compiled_out)
         torch._dynamo.reset()
 
-    @skipIfRocm
     @config.patch({"triton.cudagraphs": True, "size_asserts": False})
     @dynamo_config.patch(automatic_dynamic_shapes=True)
     def test_expanded_inputs_cudagraphs_no_size_asserts(self):
@@ -250,8 +246,6 @@ class CudaReproTests(TestCase):
         )
         self.assertTrue(same(fn(*inputs), inputs[0] + inputs[1]))
 
-    # TODO: enable
-    @skipIfRocm
     @config.patch({"triton.cudagraph_trees": False})
     @config.patch({"triton.cudagraphs": True})
     @dynamo_config.patch(automatic_dynamic_shapes=True)
@@ -352,6 +346,23 @@ class CudaReproTests(TestCase):
         x = torch.randn(1, 8, 768, device="cuda")
         correct = forward(x)
         actual = torch.compile(forward, fullgraph=True)(x)
+        self.assertEqual(actual, correct)
+
+    def test_full_copy(self):
+        def forward(x):
+            full_10 = torch.ops.aten.full.default(
+                [204, 204, 28],
+                0,
+                dtype=torch.float64,
+                layout=torch.strided,
+                device="cuda",
+                pin_memory=False,
+            )
+            return x + full_10.to("cpu")
+
+        o = torch.randn([204, 204, 28], dtype=torch.float64)
+        correct = forward(o)
+        actual = torch.compile(forward, fullgraph=True)(o)
         self.assertEqual(actual, correct)
 
     def test_autotune_inplace_kernel(self):
@@ -784,7 +795,7 @@ class CudaReproTests(TestCase):
     def test_issue100806(self):
         class Model(torch.nn.Module):
             def __init__(self):
-                super(Model, self).__init__()
+                super().__init__()
                 self.linear1 = torch.nn.Linear(10, 20)
                 self.linear2 = torch.nn.Linear(20, 30)
                 self.relu = torch.nn.ReLU()
@@ -836,7 +847,7 @@ class CudaReproTests(TestCase):
         """
 
         def fn(values, offsets):
-            return torch.ops.prims._inductor_bucketize(values, offsets)
+            return torch.bucketize(values, offsets)
 
         values = torch.rand((64, 64), device="cuda")
         offsets = torch.tensor([0.05, 0.1, 0.5, 0.8, 0.85, 0.95], device="cuda")
@@ -928,6 +939,88 @@ class CudaReproTests(TestCase):
         compiled = compile_fx_inner(mod, args)
         ref = compiled(list(args))
         assert same(ref, correct)
+
+    @config.patch({"triton.cudagraphs": True})
+    def test_index_put_inplace_cudagraph(self):
+        def fn(x, y, z):
+            x = torch.zeros_like(x)
+            return x.index_put_([y], z, True)
+
+        x = torch.zeros((512, 512), device="cuda", dtype=torch.bool)
+        y = torch.zeros((512,), device="cuda", dtype=torch.int64)
+        z = torch.ones((512, 512), device="cuda", dtype=torch.bool)
+
+        opt_fn = torch._dynamo.optimize("inductor")(fn)
+
+        ref = fn(x, y, z)
+
+        # run it twice to test cuda graph issue
+        res = opt_fn(x, y, z)
+        res = opt_fn(x, y, z)
+
+        self.assertEqual(ref, res)
+
+    @config.patch({"triton.cudagraphs": True})
+    def test_index_put_cudagraph(self):
+        def fn(x, y, z):
+            x = torch.zeros_like(x)
+            return x.index_put([y], z, True)
+
+        x = torch.zeros((512, 512), device="cuda", dtype=torch.bool)
+        y = torch.zeros((512,), device="cuda", dtype=torch.int64)
+        z = torch.ones((512, 512), device="cuda", dtype=torch.bool)
+
+        opt_fn = torch._dynamo.optimize("inductor")(fn)
+
+        ref = fn(x, y, z)
+
+        # run it twice to test cuda graph issue
+        res = opt_fn(x, y, z)
+        res = opt_fn(x, y, z)
+
+        self.assertEqual(ref, res)
+
+    @config.patch({"triton.cudagraphs": True})
+    def test_index_put_no_fallback_cudagraph(self):
+        def fn(x, y, z):
+            x = torch.zeros_like(x)
+            return x.index_put([y], z, True)
+
+        x = torch.zeros((512, 512), device="cuda", dtype=torch.int32)
+        y = torch.zeros((512,), device="cuda", dtype=torch.int64)
+        z = torch.ones((512, 512), device="cuda", dtype=torch.int32)
+
+        opt_fn = torch._dynamo.optimize("inductor")(fn)
+
+        ref = fn(x, y, z)
+
+        # run it twice to test cuda graph issue
+        res = opt_fn(x, y, z)
+        res = opt_fn(x, y, z)
+
+        self.assertEqual(ref, res)
+
+    # https://github.com/pytorch/pytorch/issues/104937
+    def test_linear_with_zero_infeature_size(self):
+        m = nn.Linear(in_features=0, out_features=0, bias=True).to("cuda")
+        x = torch.rand(1, 1, 0, device="cuda")
+        expect = m(x)
+        opt_fn = torch.compile(m)
+        actual = opt_fn(x)
+        self.assertEqual(expect, actual)
+
+    @config.patch(fallback_random=True)
+    def test_multi_output_layout_fallback(self):
+        mod = nn.RReLU(lower=3.2350976, upper=8.4220314, inplace=True)
+        inp = torch.rand([4, 4]).cuda()
+        m = torch.compile(mod)
+
+        with freeze_rng_state():
+            o1 = m(inp.clone())
+
+        o2 = mod(inp.clone())
+
+        self.assertEqual(o1, o2)
 
 
 if __name__ == "__main__":

@@ -345,6 +345,7 @@ def _get_share_qparams_ops_configs() -> List[BackendPatternConfig]:
         executorch_default_op_quint8_dtype_config,
     ]
     share_qparams_ops = [
+        torch.nn.Flatten,
         F.adaptive_avg_pool2d,
         F.elu,
         F.hardtanh,
@@ -413,6 +414,16 @@ def _get_cat_configs() -> List[BackendPatternConfig]:
     cat_configs = []
     cat_configs.append(
         BackendPatternConfig(torch.cat)
+        .set_observation_type(ObservationType.OUTPUT_SHARE_OBSERVER_WITH_INPUT)
+        .set_dtype_configs(dtype_configs)
+    )
+    cat_configs.append(
+        BackendPatternConfig(torch.concat)
+        .set_observation_type(ObservationType.OUTPUT_SHARE_OBSERVER_WITH_INPUT)
+        .set_dtype_configs(dtype_configs)
+    )
+    cat_configs.append(
+        BackendPatternConfig(torch.concatenate)
         .set_observation_type(ObservationType.OUTPUT_SHARE_OBSERVER_WITH_INPUT)
         .set_dtype_configs(dtype_configs)
     )
