@@ -1503,6 +1503,7 @@ class TestSDPAFailureModes(NNTestCase):
                     q, k, v, None, 0.0, False))
 
     @onlyCUDA
+    @skipIfRocm  # Sequence length < 128
     @unittest.skipIf(not PLATFORM_SUPPORTS_FLASH_ATTENTION, "Does not support SDPA or pre-SM80 hardware")
     def test_flash_autocast_fp32_float16(self, device):
         dtype = torch.float
@@ -1515,6 +1516,7 @@ class TestSDPAFailureModes(NNTestCase):
                     q, k, v, None, 0.0, False)
 
     @onlyCUDA
+    @skipIfRocm  # Sequence length < 128
     @unittest.skipIf(not PLATFORM_SUPPORTS_FLASH_ATTENTION, "Does not support SDPA or pre-SM80 hardware")
     def test_flash_autocast_fp32_bfloat16(self, device):
         dtype = torch.float
