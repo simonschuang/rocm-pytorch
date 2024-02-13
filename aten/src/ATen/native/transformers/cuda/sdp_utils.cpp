@@ -306,7 +306,6 @@ bool check_all_tensors_on_device(sdp_params const& params, bool debug) {
 bool can_use_flash_attention(sdp_params const& params, bool debug) {
 #ifndef USE_FLASH_ATTENTION
   TORCH_WARN_ONCE(!debug, "Torch was not compiled with flash attention.");
-  static_assert(false, "Torch was not compiled with flash attention.");
   return false;
 #endif
 
